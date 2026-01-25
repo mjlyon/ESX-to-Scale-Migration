@@ -21,7 +21,7 @@ DRY_RUN=0
 OUT_DIR=""
 VIRTIO_ISO=""
 VDDK_LIBDIR=""
-INSECURE_VMWARE="false"
+INSECURE_VMWARE="true"
 VERIFY_SCALE_TLS="false"
 AUTO_INSTALL="ask"
 ESX_CONNECT_TIMEOUT_SEC=30
@@ -129,7 +129,7 @@ check_prerequisites() {
   mgr="$(detect_pkg_mgr)"
   log "Package manager: $mgr"
 
-  local required=(bash curl jq python3 virt-v2v virsh df sort awk stat find timeout tee mktemp)
+  local required=(bash curl jq python3 virt-v2v virsh df sort awk stat find timeout tee mktemp qemu-img)
   local missing=()
 
   for c in "${required[@]}"; do
@@ -156,11 +156,11 @@ check_prerequisites() {
 
     case "$mgr" in
       apt)
-        install_packages apt curl jq python3 virt-v2v libguestfs-tools libvirt-clients coreutils findutils gawk
+        install_packages apt curl jq python3 virt-v2v libguestfs-tools libvirt-clients coreutils findutils gawk qemu-utils
         ;;
       dnf|yum)
-        install_packages "$mgr" curl jq python3 virt-v2v libguestfs-tools libvirt-client coreutils findutils gawk || \
-        install_packages "$mgr" curl jq python3 virt-v2v libguestfs-tools libvirt coreutils findutils gawk
+        install_packages "$mgr" curl jq python3 virt-v2v libguestfs-tools libvirt-client coreutils findutils gawk qemu-img || \
+        install_packages "$mgr" curl jq python3 virt-v2v libguestfs-tools libvirt coreutils findutils gawk qemu-img
         ;;
       *)
         err "Install manually: ${missing[*]}"
@@ -175,6 +175,43 @@ check_prerequisites() {
       err "virt-v2v not functional. Try: export LIBGUESTFS_BACKEND=direct"
       exit 1
     }
+  fi
+  
+  # Check for virtio-win ISO
+  if [[ -z "$VIRTIO_ISO" ]]; then
+    log "Checking for virtio-win drivers..."
+    
+    # Check common locations
+    local common_paths=(
+      "/usr/share/virtio-win/virtio-win.iso"
+      "/storage/virtio-win.iso"
+      "$HOME/virtio-win.iso"
+      "/tmp/virtio-win.iso"
+    )
+    
+    for path in "${common_paths[@]}"; do
+      if [[ -f "$path" ]]; then
+        VIRTIO_ISO="$path"
+        log "Found virtio-win ISO at: $VIRTIO_ISO"
+        break
+      fi
+    done
+    
+    if [[ -z "$VIRTIO_ISO" ]]; then
+      warn "virtio-win ISO not found in common locations"
+      if ask_install "virtio-win drivers (required for Windows VMs)"; then
+        log "Downloading latest virtio-win ISO..."
+        VIRTIO_ISO="/tmp/virtio-win.iso"
+        if curl -L -o "$VIRTIO_ISO" "https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso"; then
+          log "Downloaded virtio-win ISO to: $VIRTIO_ISO"
+        else
+          err "Failed to download virtio-win ISO"
+          VIRTIO_ISO=""
+        fi
+      else
+        warn "Proceeding without virtio-win drivers (Windows VMs may not boot properly)"
+      fi
+    fi
   fi
 }
 
@@ -277,6 +314,12 @@ upload_disk_file() {
   [[ "$verify_tls" == "true" ]] && curl_tls=()
 
   fname="$(basename "$filepath")"
+  
+  # Clean up multiple .qcow2 extensions (e.g., file.qcow2.qcow2.qcow2 -> file.qcow2)
+  while [[ "$fname" =~ \.qcow2\.qcow2 ]]; do
+    fname="${fname%.qcow2}"
+  done
+  
   fenc="$(urlencode "$fname")"
   size="$(filesize_bytes "$filepath")"
   url="https://${sc_node}/rest/v1/VirtualDisk/upload?filename=${fenc}&filesize=${size}"
