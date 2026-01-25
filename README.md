@@ -260,30 +260,26 @@ Check logs:
 
 After successful upload to Scale HC3:
 
-1. **Import disk in Scale UI**
+1. **Imported disk visible in Scale UI**
    - Disks appear in Virtual Disk inventory
    - Create new VM and attach uploaded disk(s)
 
 2. **Configure VM settings**
    - Set appropriate CPU/RAM
-   - Use VirtIO controllers for best performance
-   - Configure network adapter (VirtIO recommended)
+   - Use VIRTIO for disk and network (virt-v2v should update drivers automatically)
 
 3. **Boot and verify**
-   - Windows VMs should boot with injected VirtIO drivers
+   - Windows VMs should boot with injected VIRTIO drivers
    - Verify network connectivity
    - Install Scale guest tools if available
 
 4. **Clean up**
-   - Remove conversion workspace files after verification
-   - Unmount virtio-win ISO: `sudo umount /usr/share/virtio-win`
+   - Remove uploaded disks as necessary
+     
 
 ## Contributing
 
-Contributions welcome! Please:
-- Test changes with both Windows and Linux VMs
-- Update documentation for new features
-- Follow existing code style
+Please help, I don't know what I'm doing.
 
 ## License
 
@@ -291,11 +287,9 @@ MIT License - See LICENSE file for details
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/esx2hc/issues)
-- **Scale Computing Support**: [support.scalecomputing.com](https://support.scalecomputing.com)
-- **VMware VDDK**: [VMware Developer Community](https://developer.vmware.com/)
+Contribute or file an issue!
 
-## Acknowledgments
+## Main components
 
 - Built on top of virt-v2v from the libguestfs project
 - Uses VMware VDDK for optimal disk access performance
