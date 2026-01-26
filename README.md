@@ -1,6 +1,6 @@
-# ESX to Scale Computing HC3 Migration Tool
+# ESX to Scale Computing Hypercore Migration Tool
 
-Automated migration tool to convert and upload VMware ESXi/vCenter VMs to Scale Computing HC3 clusters using virt-v2v and VDDK.
+Automated migration tool to convert and upload VMware ESXi/vCenter VMs to Scale Computing Hypercore clusters using virt-v2v and VDDK.
 THIS IS PROVIDED AS-IS WITH NO WARRANTY
 USE AT YOUR OWN RISK!
 
@@ -11,7 +11,7 @@ This script automates the process of:
 2. Converting VMs using virt-v2v with VDDK for optimal performance
 3. Injecting VirtIO drivers for Windows VMs
 4. Converting disk images to qcow2 format
-5. Uploading converted disks to Scale Computing HC3 via REST API
+5. Uploading converted disks to Scale Computing Hypercore via REST API
 
 ## Prerequisites
 
@@ -49,7 +49,7 @@ The script will automatically detect and offer to install missing prerequisites:
 - **Network access** from Linux host to:
   - ESXi/vCenter on port 443 (HTTPS)
   - ESXi host on port 22 (SSH)
-  - Scale HC3 cluster on port 443 (HTTPS)
+  - Scale Hypercore cluster on port 443 (HTTPS)
 
 ### VirtIO Drivers (Windows VMs)
 
@@ -92,7 +92,7 @@ The script will interactively prompt for:
 - VMware connection details (ESXi/vCenter host, username, password)
 - VM selection from available VMs
 - Storage location for conversion workspace
-- Scale HC3 cluster details (IP, username, password)
+- Scale Hypercore cluster details (IP, username, password)
 
 ### Command-Line Options
 
@@ -228,7 +228,7 @@ Check logs:
   - Override with `--vmware-insecure=false` for production
 
 - **Scale TLS verification disabled by default**
-  - Most HC3 clusters use self-signed certificates
+  - Most Hypercore clusters use self-signed certificates
   - Override with `--scale-verify-tls` if using CA-signed certs
 
 - **Credentials**
@@ -258,7 +258,7 @@ Check logs:
 
 ## Post-Migration Steps
 
-After successful upload to Scale HC3:
+After successful upload to Scale Hypercore:
 
 1. **Imported disk visible in Scale UI**
    - Disks appear in Virtual Disk inventory
