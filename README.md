@@ -275,7 +275,17 @@ After successful upload to Scale HC3:
 
 4. **Clean up**
    - Remove uploaded disks as necessary
-     
+
+## To-Do
+
+Follow-up tasks for scalability
+
+1. **Allow for multiple migrations**
+   - Select multiple VMs to at least serially migrate
+   - create parallel virt-v2v instances ideally
+2. **Better auth**
+   - Auth is primitive and requires more prompts than I'd like
+   - add flags like --scale-host ==scale-user etc. 
 
 ## Contributing
 
