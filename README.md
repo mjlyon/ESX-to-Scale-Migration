@@ -103,7 +103,7 @@ sudo libguestfs-test-tool
 The VDDK provides high-performance direct disk access to VMware VMs.
 
 1. **Download VDDK** from VMware:
-   - Visit: https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
+   - Visit: https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/latest
    - Register for a free VMware Developer account (if needed)
    - Download: **VMware Virtual Disk Development Kit** (latest version)
    - Recommended: VDDK 8.0.3 or newer
