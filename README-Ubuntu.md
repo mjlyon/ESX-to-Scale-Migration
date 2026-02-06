@@ -151,7 +151,7 @@ The VDDK provides high-performance direct disk access to VMware VMs.
 
 #### Download VDDK
 
-1. Visit: https://developer.broadcom.com/tools/open-virtualization-format-ovf-tool/latest
+1. Visit: https://developer.broadcom.com/sdks/vmware-virtual-disk-development-kit-vddk/latest
 2. Register for a free VMware Developer account (if needed)
 3. Download: **VMware Virtual Disk Development Kit** (latest version)
 4. Recommended: VDDK 8.0.3 or newer
