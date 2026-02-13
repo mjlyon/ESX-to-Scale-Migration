@@ -5,13 +5,8 @@ echo "[INFO] Starting: $(basename "$0") at $(date)"
 
 # VMware -> Scale: Convert with virt-v2v, then upload disk(s) to HC3 via /rest/v1/VirtualDisk/upload
 #
-# NOTE: libvirt ESX driver usually prompts for a password interactively (expected).
-# HARDENING NOTE (IMPORTANT):
-#   libvirt ESX driver does NOT reliably cache or reuse authentication between separate virsh invocations.
-#   If virsh runs where it cannot prompt (non-TTY stdin), it can fail with:
-#     HTTP 500 for call to 'Login' ... incorrect user name or password
-#   Therefore: run virsh in the foreground when it may need to prompt.
-#   To capture output, use tee to a file and parse that file.
+# NOTE: libvirt ESX driver can prompt repeatedly for credentials across separate virsh invocations.
+# We provide credentials through a temporary LIBVIRT_AUTH_FILE to avoid repeated interactive prompts.
 #
 # virt-v2v note:
 #   When using `-i libvirt -ic esx://...`, virt-v2v expects a password file via `-ip <file>`
@@ -432,18 +427,33 @@ prompt_secret VC_PASS "VMware password"
 ESX_URI="$(build_esx_uri "$VC_HOST" "$VC_USER" "$INSECURE_VMWARE")"
 export LIBVIRT_DEFAULT_URI="$ESX_URI"
 
-# Temp files (vm list + v2v password file)
+# Temp files (vm list + auth files)
 VM_LIST_FILE="$(mktemp /tmp/esx2hc.vmlist.XXXXXX)"
 V2V_PASS_FILE="$(mktemp /tmp/esx2hc.v2vpass.XXXXXX)"
+LIBVIRT_AUTH_FILE_TMP="$(mktemp /tmp/esx2hc.libvirt-auth.XXXXXX)"
 cleanup() {
-  rm -f "$VM_LIST_FILE" "$V2V_PASS_FILE"
+  rm -f "$VM_LIST_FILE" "$V2V_PASS_FILE" "$LIBVIRT_AUTH_FILE_TMP"
 }
 trap cleanup EXIT
 
 chmod 600 "$V2V_PASS_FILE"
 printf '%s' "$VC_PASS" >"$V2V_PASS_FILE"
 
-# 5) Validate virsh (foreground so it can prompt)
+chmod 600 "$LIBVIRT_AUTH_FILE_TMP"
+cat >"$LIBVIRT_AUTH_FILE_TMP" <<EOF
+[credentials-vmware]
+username=$VC_USER
+password=$VC_PASS
+
+[auth-esx-default]
+credentials=vmware
+
+[auth-vpx-default]
+credentials=vmware
+EOF
+export LIBVIRT_AUTH_FILE="$LIBVIRT_AUTH_FILE_TMP"
+
+# 5) Validate virsh access
 log "Validating VMware access via virsh with timeout=${ESX_CONNECT_TIMEOUT_SEC}s..."
 if [[ "$DRY_RUN" -eq 0 ]]; then
   if timeout --foreground "${ESX_CONNECT_TIMEOUT_SEC}" \
@@ -462,8 +472,8 @@ else
   warn "Dry-run: skipping virsh validation."
 fi
 
-# 6) Fetch VM list via virsh (foreground) and tee to a temp file; filter prompt noise out of the file
-log "Fetching VM list via virsh (foreground + tee to capture output)"
+# 6) Fetch VM list via virsh and tee to a temp file
+log "Fetching VM list via virsh"
 if [[ "$DRY_RUN" -eq 1 ]]; then
   cat >"$VM_LIST_FILE" <<'EOF'
  Id   Name                        State
@@ -545,7 +555,7 @@ else
   exit 1
 fi
 
-# Get VM moref (required for VDDK)
+# Try to get VM moref (optional; used for diagnostics/troubleshooting)
 if [[ -n "$VDDK_LIBDIR" && "$DRY_RUN" -eq 0 ]]; then
   log "Retrieving VM moref (Managed Object Reference)..."
   VM_MOREF=""
@@ -561,30 +571,12 @@ if [[ -n "$VDDK_LIBDIR" && "$DRY_RUN" -eq 0 ]]; then
   fi
   rm -f "$VM_XML_FILE"
   
-  # Method 2: Try vim-cmd via SSH (more reliable for older libvirt)
   if [[ -z "$VM_MOREF" ]]; then
-    log "Trying to retrieve moref via SSH (vim-cmd)..."
-    # First get all VMs, then filter by name
-    VM_MOREF=$(ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
-      "${VC_USER}@${VC_HOST}" \
-      "vim-cmd vmsvc/getallvms | grep -F '${SELECTED_VM}' | awk '{print \$1}'" 2>/dev/null || true)
+    warn "Could not retrieve VM moref. Continuing without explicit moref."
+    warn "virt-v2v will resolve the source VM by name."
+  else
+    log "VM moref: $VM_MOREF"
   fi
-  
-  if [[ -z "$VM_MOREF" ]]; then
-    err "Failed to retrieve VM moref. This is required for VDDK with direct ESXi access."
-    err ""
-    err "Tried methods:"
-    err "  1) virsh dumpxml (requires libvirt >= 3.7)"
-    err "  2) SSH to ESXi and vim-cmd (requires SSH access)"
-    err ""
-    err "Alternatives:"
-    err "  A) Enable SSH on ESXi: ESXi > Host > Actions > Services > Enable Secure Shell (SSH)"
-    err "  B) Run without VDDK (slower, may have issues): remove --vddk-libdir flag"
-    err "  C) Manually provide moref by modifying the script"
-    exit 1
-  fi
-  
-  log "VM moref: $VM_MOREF"
 fi
 
 VM_OUT_DIR="${OUT_DIR%/}/${SELECTED_VM// /_}"
@@ -725,7 +717,11 @@ else
         newname="${base}.qcow2"
         
         log "  Converting: $(basename "$f") -> $(basename "$newname")"
-        if qemu-img convert -f raw -O qcow2 -o compat=0.10 "$f" "$newname"; then
+        src_format="raw"
+        case "${f,,}" in
+          *.vmdk) src_format="vmdk" ;;
+        esac
+        if qemu-img convert -f "$src_format" -O qcow2 -o compat=0.10 "$f" "$newname"; then
           log "  Conversion successful, removing original file"
           rm -f "$f"
           DISK_FILES+=("$newname")
@@ -769,7 +765,7 @@ log "==================================================================="
 log ""
 log "When creating the VM in Scale Computing:"
 log "  1. Set firmware to UEFI+vTPM (not BIOS)"
-log "  2. Attach the uploaded disk
+log "  2. Attach the uploaded disk"
 log "  3. Remember to update boot order"
 log ""
 log "If Windows 11 doesn't boot (stuck at UEFI shell or 'No bootable device'):"
