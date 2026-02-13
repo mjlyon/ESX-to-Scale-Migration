@@ -3,7 +3,7 @@ set -euo pipefail
 
 echo "[INFO] Starting: $(basename "$0") at $(date)"
 
-# VMware -> Scale: Convert with virt-v2v, then upload disk(s) to SC//Platform via /rest/v1/VirtualDisk/upload
+# VMware -> Scale: Convert with virt-v2v, then upload disk(s) to HC3 via /rest/v1/VirtualDisk/upload
 #
 # NOTE: libvirt ESX driver can prompt repeatedly for credentials across separate virsh invocations.
 # We provide credentials through a temporary LIBVIRT_AUTH_FILE to avoid repeated interactive prompts.
