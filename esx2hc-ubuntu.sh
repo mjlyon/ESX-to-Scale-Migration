@@ -171,6 +171,32 @@ check_prerequisites() {
       coreutils findutils gawk qemu-utils nbdkit pv
   fi
 
+  # Windows firstboot helpers are required for Windows guest conversions.
+  # On Ubuntu 24.04+ these are provided by the rhsrvany package.
+  local virt_tools_dir="/usr/share/virt-tools"
+  if [[ ! -f "${virt_tools_dir}/rhsrvany.exe" && ! -f "${virt_tools_dir}/pvvxsvc.exe" ]]; then
+    warn "Windows firstboot helper not found in ${virt_tools_dir} (rhsrvany.exe/pvvxsvc.exe)."
+    warn "Windows VM conversions may fail until this is installed."
+
+    if command -v apt-cache >/dev/null 2>&1 && apt-cache show rhsrvany >/dev/null 2>&1; then
+      if ask_install "rhsrvany (Windows firstboot helper)"; then
+        if install_packages apt rhsrvany; then
+          log "Installed rhsrvany package."
+        else
+          warn "Could not install rhsrvany package automatically."
+        fi
+      fi
+    else
+      warn "Package rhsrvany is not available in this apt repository set."
+      warn "Build from source if needed: https://github.com/rwmjones/rhsrvany"
+    fi
+
+    if [[ ! -f "${virt_tools_dir}/rhsrvany.exe" && ! -f "${virt_tools_dir}/pvvxsvc.exe" ]]; then
+      warn "Still missing Windows firstboot helpers."
+      warn "Install rhsrvany (if packaged) or build from: https://github.com/rwmjones/rhsrvany"
+    fi
+  fi
+
   # Check for nbdkit VDDK plugin if VDDK is specified
   if [[ -n "$VDDK_LIBDIR" ]]; then
     log "Checking for nbdkit VDDK plugin..."
