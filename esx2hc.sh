@@ -166,6 +166,42 @@ check_prerequisites() {
     esac
   fi
 
+  # Windows firstboot helpers are required for Windows guest conversions.
+  # Newer Ubuntu releases ship these via the rhsrvany package.
+  local virt_tools_dir="/usr/share/virt-tools"
+  if [[ ! -f "${virt_tools_dir}/rhsrvany.exe" && ! -f "${virt_tools_dir}/pvvxsvc.exe" ]]; then
+    warn "Windows firstboot helper not found in ${virt_tools_dir} (rhsrvany.exe/pvvxsvc.exe)."
+    warn "Windows VM conversions may fail until this is installed."
+
+    if ask_install "rhsrvany (Windows firstboot helper)"; then
+      case "$mgr" in
+        apt)
+          if command -v apt-cache >/dev/null 2>&1 && apt-cache show rhsrvany >/dev/null 2>&1; then
+            if install_packages apt rhsrvany; then
+              log "Installed rhsrvany package."
+            else
+              warn "Could not install rhsrvany package automatically."
+            fi
+          else
+            warn "Package rhsrvany is not available in this apt repository set."
+          fi
+          ;;
+        dnf|yum)
+          if install_packages "$mgr" rhsrvany; then
+            log "Installed rhsrvany package."
+          else
+            warn "Could not install rhsrvany package automatically."
+          fi
+          ;;
+      esac
+    fi
+
+    if [[ ! -f "${virt_tools_dir}/rhsrvany.exe" && ! -f "${virt_tools_dir}/pvvxsvc.exe" ]]; then
+      warn "Still missing Windows firstboot helpers."
+      warn "Install rhsrvany (if packaged) or build from: https://github.com/rwmjones/rhsrvany"
+    fi
+  fi
+
   if [[ "$DRY_RUN" -eq 0 ]]; then
     export LIBGUESTFS_BACKEND="${LIBGUESTFS_BACKEND:-direct}"
     virt-v2v --version >/dev/null 2>&1 || {
