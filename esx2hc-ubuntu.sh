@@ -19,6 +19,7 @@ OUT_DIR=""
 VIRTIO_ISO=""
 VDDK_LIBDIR=""
 INSECURE_VMWARE="true"
+VMWARE_VCENTER=""
 VERIFY_SCALE_TLS="false"
 AUTO_INSTALL="ask"
 ESX_CONNECT_TIMEOUT_SEC=30
@@ -39,6 +40,7 @@ Options:
   --vddk-libdir /path            Path to VDDK installation directory (e.g., /usr/local/vmware-vix-disklib-distrib)
   --vmware-insecure              Skip VMware TLS verify (sets no_verify=1)
   --vmware-insecure=true|false
+  --vmware-vcenter host|*|none   ESXi mode: vCenter hint for dvSwitch metadata (default: *)
   --scale-verify-tls             Verify Scale TLS (disables curl -k)
   --scale-verify-tls=true|false
   --auto-install yes|no|ask      Auto-install missing prereqs (default: ask)
@@ -255,10 +257,14 @@ check_prerequisites() {
 }
 
 build_esx_uri() {
-  local host="$1" user="$2" insecure="$3"
+  local host="$1" user="$2" insecure="$3" vcenter="${4:-}"
   local nv="0"
   [[ "$insecure" == "true" ]] && nv="1"
-  echo "esx://${user}@${host}/?no_verify=${nv}"
+  local uri="esx://${user}@${host}/?no_verify=${nv}"
+  if [[ -n "$vcenter" ]]; then
+    uri="${uri}&vcenter=${vcenter}"
+  fi
+  echo "$uri"
 }
 
 select_conversion_storage() {
@@ -434,6 +440,8 @@ while [[ $# -gt 0 ]]; do
 
     --vmware-insecure) INSECURE_VMWARE="true"; shift ;;
     --vmware-insecure=*) INSECURE_VMWARE="${1#*=}"; shift ;;
+    --vmware-vcenter) VMWARE_VCENTER="${2:?--vmware-vcenter requires host|*|none}"; shift 2 ;;
+    --vmware-vcenter=*) VMWARE_VCENTER="${1#*=}"; shift ;;
 
     --scale-verify-tls) VERIFY_SCALE_TLS="true"; shift ;;
     --scale-verify-tls=*) VERIFY_SCALE_TLS="${1#*=}"; shift ;;
@@ -468,8 +476,20 @@ fi
 prompt VC_USER "VMware username"
 prompt_secret VC_PASS "VMware password"
 
-ESX_URI="$(build_esx_uri "$VC_HOST" "$VC_USER" "$INSECURE_VMWARE")"
+if [[ "$VC_KIND" != "esxi" ]]; then
+  VMWARE_VCENTER=""
+elif [[ -z "$VMWARE_VCENTER" ]]; then
+  VMWARE_VCENTER="*"
+fi
+if [[ "${VMWARE_VCENTER,,}" == "none" ]]; then
+  VMWARE_VCENTER=""
+fi
+
+ESX_URI="$(build_esx_uri "$VC_HOST" "$VC_USER" "$INSECURE_VMWARE" "$VMWARE_VCENTER")"
 export LIBVIRT_DEFAULT_URI="$ESX_URI"
+if [[ -n "$VMWARE_VCENTER" ]]; then
+  log "Using VMware vCenter hint in URI: $VMWARE_VCENTER"
+fi
 
 # Temp files (vm list + auth files)
 VM_LIST_FILE="$(mktemp /tmp/esx2hc.vmlist.XXXXXX)"
@@ -500,18 +520,34 @@ export LIBVIRT_AUTH_FILE="$LIBVIRT_AUTH_FILE_TMP"
 # 5) Validate virsh access
 log "Validating VMware access via virsh with timeout=${ESX_CONNECT_TIMEOUT_SEC}s..."
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  if timeout --foreground "${ESX_CONNECT_TIMEOUT_SEC}" \
+  if ! timeout --foreground "${ESX_CONNECT_TIMEOUT_SEC}" \
       virsh "${VIRSH_KA_ARGS[@]}" -c "$ESX_URI" uri; then
-    log "virsh URI check succeeded."
-  else
     rc=$?
-    if [[ "$rc" -eq 124 ]]; then
-      err "Timed out after ${ESX_CONNECT_TIMEOUT_SEC}s (likely waiting on password prompt or stalled TLS)."
-    else
-      err "virsh failed to connect/authenticate (rc=$rc)."
+
+    if [[ "$VC_KIND" == "esxi" && "$VMWARE_VCENTER" == "*" ]]; then
+      warn "virsh connection failed with vcenter=* hint; retrying without vCenter hint."
+      VMWARE_VCENTER=""
+      ESX_URI="$(build_esx_uri "$VC_HOST" "$VC_USER" "$INSECURE_VMWARE" "$VMWARE_VCENTER")"
+      export LIBVIRT_DEFAULT_URI="$ESX_URI"
+      if timeout --foreground "${ESX_CONNECT_TIMEOUT_SEC}" \
+          virsh "${VIRSH_KA_ARGS[@]}" -c "$ESX_URI" uri; then
+        rc=0
+        warn "Connected without vCenter hint. dvSwitch-backed VMs may still fail."
+      else
+        rc=$?
+      fi
     fi
-    exit 1
+
+    if [[ "$rc" -ne 0 ]]; then
+      if [[ "$rc" -eq 124 ]]; then
+        err "Timed out after ${ESX_CONNECT_TIMEOUT_SEC}s (likely waiting on password prompt or stalled TLS)."
+      else
+        err "virsh failed to connect/authenticate (rc=$rc)."
+      fi
+      exit 1
+    fi
   fi
+  log "virsh URI check succeeded."
 else
   warn "Dry-run: skipping virsh validation."
 fi
@@ -722,11 +758,32 @@ else
   log "Running: ${CMD[*]}"
   
   # Ubuntu-specific: Run with sudo and set LD_LIBRARY_PATH for VDDK
+  V2V_LOG_FILE="$(mktemp /tmp/esx2hc.v2v.XXXXXX.log)"
   if [[ -n "$vddk_lib_path" ]]; then
     log "Running virt-v2v with sudo and LD_LIBRARY_PATH=${vddk_lib_path}"
-    sudo LD_LIBRARY_PATH="$vddk_lib_path" "${CMD[@]}"
+    if sudo LD_LIBRARY_PATH="$vddk_lib_path" "${CMD[@]}" 2>&1 | tee "$V2V_LOG_FILE"; then
+      rm -f "$V2V_LOG_FILE"
+    else
+      if grep -Eq "Missing essential config entry 'ethernet[0-9]+\\.dvs\\.portgroupId'" "$V2V_LOG_FILE"; then
+        err "Detected VMware dvSwitch source metadata issue: missing ethernet*.dvs.portgroupId."
+        err "Recommended fix: run against vCenter (menu option 1), or pass --vmware-vcenter <vcenter-host>."
+        err "If no vCenter exists, move VM NIC(s) to a standard vSwitch port group before conversion."
+      fi
+      rm -f "$V2V_LOG_FILE"
+      exit 1
+    fi
   else
-    sudo "${CMD[@]}"
+    if sudo "${CMD[@]}" 2>&1 | tee "$V2V_LOG_FILE"; then
+      rm -f "$V2V_LOG_FILE"
+    else
+      if grep -Eq "Missing essential config entry 'ethernet[0-9]+\\.dvs\\.portgroupId'" "$V2V_LOG_FILE"; then
+        err "Detected VMware dvSwitch source metadata issue: missing ethernet*.dvs.portgroupId."
+        err "Recommended fix: run against vCenter (menu option 1), or pass --vmware-vcenter <vcenter-host>."
+        err "If no vCenter exists, move VM NIC(s) to a standard vSwitch port group before conversion."
+      fi
+      rm -f "$V2V_LOG_FILE"
+      exit 1
+    fi
   fi
 fi
 
