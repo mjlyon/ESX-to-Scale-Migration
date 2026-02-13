@@ -422,7 +422,7 @@ echo "Installation complete! Log out and back in for group changes to take effec
 ### First Migration
 ```bash
 # Run the script with VDDK path
-./esx2hc.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
+./esx2hc-ubuntu.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
 
 # Follow interactive prompts for:
 # - VMware connection details
@@ -435,12 +435,12 @@ echo "Installation complete! Log out and back in for group changes to take effec
 
 ### Interactive Mode (Recommended for First Use)
 ```bash
-./esx2hc.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
+./esx2hc-ubuntu.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
 ```
 
 ### Automated Mode with All Options
 ```bash
-./esx2hc.sh \
+./esx2hc-ubuntu.sh \
   --vddk-libdir /usr/local/vmware-vix-disklib-distrib \
   --virtio-win-iso /opt/virtio-win/virtio-win.iso \
   --out-dir /storage/vm_conversions \
@@ -450,14 +450,14 @@ echo "Installation complete! Log out and back in for group changes to take effec
 
 ### Dry Run (Test Without Converting)
 ```bash
-./esx2hc.sh \
+./esx2hc-ubuntu.sh \
   --vddk-libdir /usr/local/vmware-vix-disklib-distrib \
   --dry-run
 ```
 
 ### With TLS Verification Enabled
 ```bash
-./esx2hc.sh \
+./esx2hc-ubuntu.sh \
   --vddk-libdir /usr/local/vmware-vix-disklib-distrib \
   --vmware-insecure=false \
   --scale-verify-tls
@@ -509,7 +509,7 @@ ls -la /storage/vm_conversions
 sudo chown -R $(whoami):$(whoami) /storage/vm_conversions
 
 # Or run with sudo
-sudo -E ./esx2hc.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
+sudo -E ./esx2hc-ubuntu.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
 ```
 
 ### Issue: "libguestfs error: guestfs_launch failed"
@@ -540,7 +540,7 @@ sudo wget -O /opt/virtio-win/virtio-win.iso \
     https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
 
 # Specify ISO path explicitly
-./esx2hc.sh \
+./esx2hc-ubuntu.sh \
   --vddk-libdir /usr/local/vmware-vix-disklib-distrib \
   --virtio-win-iso /opt/virtio-win/virtio-win.iso
 ```
@@ -566,7 +566,7 @@ sudo apt update
 sudo chmod +r /boot/vmlinuz-*
 
 # Always run virt-v2v with sudo
-sudo LD_LIBRARY_PATH=/usr/local/vmware-vix-disklib-distrib/lib64 ./esx2hc.sh [options]
+sudo LD_LIBRARY_PATH=/usr/local/vmware-vix-disklib-distrib/lib64 ./esx2hc-ubuntu.sh [options]
 ```
 
 ### Issue: LD_LIBRARY_PATH Breaks System Tools
@@ -693,7 +693,7 @@ sudo apt install -y screen
 screen -S migration
 
 # Run migration
-./esx2hc.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
+./esx2hc-ubuntu.sh --vddk-libdir /usr/local/vmware-vix-disklib-distrib
 
 # Detach from screen: Press Ctrl+A, then D
 
