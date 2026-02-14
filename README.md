@@ -3,7 +3,7 @@
 Automated migration tool to convert and upload VMware ESXi/vCenter VMs to Scale Computing Hypercore clusters using virt-v2v and VDDK.
 
 **THIS IS PROVIDED AS-IS WITH NO WARRANTY. USE AT YOUR OWN RISK!**
-**I DO NOT KNOW WHAT I AM DOING**
+I DO NOT KNOW WHAT I AM DOING
 ## Overview
 
 This script automates the process of:
