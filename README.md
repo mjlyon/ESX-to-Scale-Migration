@@ -41,7 +41,7 @@
 | **OS** | Ubuntu 24.04 LTS | Ubuntu 24.04 LTS |
 | **CPU** | 2 vCPU | 4+ vCPU |
 | **RAM** | 8 GB | 16 GB+ |
-| **Storage** | 2x total VM size | NVMe/SSD |
+| **Storage** | appropriate temp storage | appropriate temp storage |
 
 
 ### 🛠️ Software
