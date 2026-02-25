@@ -1,7 +1,7 @@
 import os
 import sys
 
-from sqlalchemy import event
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -37,6 +37,16 @@ async def init_db():
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+        # Safe migrations for new columns on existing databases
+        migrations = [
+            "ALTER TABLE migration_jobs ADD COLUMN create_vm_option INTEGER DEFAULT 1",
+        ]
+        for sql in migrations:
+            try:
+                await conn.execute(text(sql))
+            except Exception:
+                pass  # Column already exists
 
 
 async def get_db():

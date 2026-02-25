@@ -78,5 +78,8 @@ class MigrationJob(Base):
     # Subprocess PID (for kill/pause)
     current_pid = Column(Integer, nullable=True)
 
+    # Migration options
+    create_vm_option = Column(Integer, default=1)  # 1=create VM, 0=disk upload only
+
     # Scale VM UUID after creation
     scale_vm_uuid = Column(String, default="")

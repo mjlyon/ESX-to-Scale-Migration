@@ -32,6 +32,7 @@ class MigrationCreateRequest(BaseModel):
     # Options
     use_vddk: bool = True
     auto_start: bool = True
+    create_vm: bool = True  # False = upload disk only, True = create full VM
 
 
 class MigrationJobResponse(BaseModel):
@@ -58,6 +59,7 @@ class MigrationJobResponse(BaseModel):
     v2v_completed: int
     upload_completed: int
     vm_created: int
+    create_vm_option: int
     log_file: str
     scale_vm_uuid: str
 

@@ -22,6 +22,7 @@ export interface MigrationJob {
   v2v_completed: number
   upload_completed: number
   vm_created: number
+  create_vm_option: number
   log_file: string
   scale_vm_uuid: string
 }

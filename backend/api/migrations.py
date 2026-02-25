@@ -38,6 +38,7 @@ async def create_migrations(
             scale_host=req.scale_host,
             scale_user=req.scale_user,
             scale_verify_tls="true" if req.scale_verify_tls else "false",
+            create_vm_option=1 if req.create_vm else 0,
             status=JobStatus.PENDING,
         )
         db.add(job)

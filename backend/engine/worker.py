@@ -161,7 +161,7 @@ class MigrationWorker:
             stages.append(VirtV2VConvertStage(self.job_id, self.context, pf(), lf()))
         if not job.upload_completed:
             stages.append(ScaleUploadStage(self.job_id, self.context, pf(), lf()))
-        if not job.vm_created:
+        if not job.vm_created and job.create_vm_option:
             stages.append(ScaleCreateVmStage(self.job_id, self.context, pf(), lf()))
         stages.append(CleanupStage(self.job_id, self.context, pf(), lf()))
         return stages

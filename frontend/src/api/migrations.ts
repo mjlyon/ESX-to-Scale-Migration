@@ -15,7 +15,7 @@ export const createMigrations = (data: {
   vmware_connection_type?: string; vmware_insecure?: boolean; vmware_vcenter_hint?: string;
   scale_host: string; scale_user: string; scale_password: string; scale_verify_tls?: boolean;
   vms: { name: string }[];
-  use_vddk?: boolean; auto_start?: boolean;
+  use_vddk?: boolean; auto_start?: boolean; create_vm?: boolean;
 }) =>
   api.post<MigrationJob[]>('/migrations', data).then(r => r.data)
 

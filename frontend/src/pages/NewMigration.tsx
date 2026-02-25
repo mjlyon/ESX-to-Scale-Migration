@@ -35,6 +35,9 @@ export function NewMigration() {
   const [scaleOk, setScaleOk] = useState(false)
   const [scaleError, setScaleError] = useState('')
 
+  // Migration options
+  const [createVm, setCreateVm] = useState(true)
+
   const [submitting, setSubmitting] = useState(false)
 
   const { data: savedVmware } = useQuery({ queryKey: ['vmware-conns'], queryFn: getVmwareConnections })
@@ -99,6 +102,7 @@ export function NewMigration() {
         scale_password: scalePass,
         vms: Array.from(selectedVms).map((name) => ({ name })),
         auto_start: true,
+        create_vm: createVm,
       })
       if (jobs.length === 1) {
         navigate(`/migrations/${jobs[0].id}`)
@@ -341,6 +345,49 @@ export function NewMigration() {
                 <li key={name}>{name}</li>
               ))}
             </ul>
+          </div>
+
+          {/* Migration mode */}
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-gray-700">Migration Mode</label>
+            <div className="space-y-2">
+              <label
+                className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                  createVm ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={createVm}
+                  onChange={() => setCreateVm(true)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <div className="font-medium text-sm">Create full VM</div>
+                  <div className="text-xs text-gray-500">
+                    Upload disk and create a VM on SC// with matching CPU, RAM, and NIC configuration from VMware
+                  </div>
+                </div>
+              </label>
+              <label
+                className={`flex items-start gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                  !createVm ? 'border-blue-500 bg-blue-50' : 'hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  checked={!createVm}
+                  onChange={() => setCreateVm(false)}
+                  className="mt-0.5"
+                />
+                <div>
+                  <div className="font-medium text-sm">Upload disk only</div>
+                  <div className="text-xs text-gray-500">
+                    Convert and upload disk to SC// virtual disk inventory — create the VM manually later
+                  </div>
+                </div>
+              </label>
+            </div>
           </div>
 
           {scaleError && <p className="text-sm text-red-600">{scaleError}</p>}
