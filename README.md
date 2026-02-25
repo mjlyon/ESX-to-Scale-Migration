@@ -39,10 +39,10 @@
 | Requirement | Minimum | Recommended |
 |---|---|---|
 | **OS** | Ubuntu 24.04 LTS | Ubuntu 24.04 LTS |
-| **CPU** | x86_64 with VT-x / AMD-V | 4+ cores |
+| **CPU** | 2 vCPU | 4+ vCPU |
 | **RAM** | 8 GB | 16 GB+ |
 | **Storage** | 2x total VM size | NVMe/SSD |
-| **Network** | 1 Gbps | 10 GbE |
+
 
 ### 🛠️ Software
 
