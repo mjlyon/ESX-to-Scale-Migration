@@ -64,6 +64,175 @@ Download the **VMware Virtual Disk Development Kit (VDDK) 8.x** tarball from the
 
 ---
 
+## 🏢 VMware / vCenter Preparation
+
+Before you can migrate VMs, the VMware environment needs to be configured to allow access from the migration container. This tool connects via **HTTPS (port 443)** for the vSphere API and disk access, and optionally via **SSH (port 22)** to retrieve VM managed object references (morefs).
+
+### 1. Enable SSH on ESXi Host(s)
+
+SSH access to the ESXi host is used to retrieve VM moref IDs, which are required by virt-v2v + VDDK for direct disk access.
+
+<details>
+<summary><b>📌 Via ESXi Web UI (Host Client)</b></summary>
+
+1. Navigate to `https://your-esxi-host` in a browser
+2. Log in with root credentials
+3. Go to **Host** → **Manage** → **Services**
+4. Find **TSM-SSH** (SSH) in the service list
+5. Click **Start** (or right-click → Start)
+6. *(Optional)* Set startup policy to **"Start and stop with host"** if you want SSH to survive reboots
+
+</details>
+
+<details>
+<summary><b>📌 Via vSphere Client (vCenter)</b></summary>
+
+1. Log into vSphere Client
+2. Select the ESXi host in the inventory
+3. Go to **Configure** → **System** → **Services**
+4. Select **SSH** and click **Start**
+5. *(Optional)* Edit startup policy to **"Start and stop with host"**
+
+> [!NOTE]
+> If you're migrating VMs from multiple ESXi hosts behind a vCenter, enable SSH on **each ESXi host** that has VMs you want to migrate.
+
+</details>
+
+<details>
+<summary><b>📌 Via ESXi Shell / DCUI</b></summary>
+
+If you have physical or IPMI/iLO console access:
+
+```bash
+# On the ESXi console (Alt+F1 for DCUI shell)
+vim-cmd hostsvc/enable_ssh
+vim-cmd hostsvc/start_ssh
+```
+
+</details>
+
+#### Verify SSH Access
+
+From the migration host (or any machine with network access):
+
+```bash
+ssh root@your-esxi-host "vim-cmd vmsvc/getallvms"
+```
+
+You should see a table listing all VMs with their Vmid, Name, File path, Guest OS, and annotation. If this works, the migration tool will be able to retrieve morefs.
+
+### 2. vCenter Permissions (if using vCenter)
+
+When connecting through vCenter instead of directly to an ESXi host, the user account needs sufficient privileges:
+
+| Permission | Where | Why |
+|---|---|---|
+| **Virtual Machine → Interaction → Power Off** | VM level | Only powered-off VMs can be migrated |
+| **Virtual Machine → Provisioning → Allow disk access** | VM level | virt-v2v reads virtual disks |
+| **Virtual Machine → Provisioning → Allow read-only disk access** | VM level | Alternative to full disk access |
+| **Host → Configuration → System Management** | Host level | SSH/moref access |
+| **Datastore → Browse Datastore** | Datastore level | Locating VMDK files |
+
+> [!TIP]
+> The built-in **Administrator** role has all needed permissions. For a least-privilege approach, create a custom role with only the permissions above and assign it scoped to the relevant VMs/hosts.
+
+### 3. Prepare VMs for Migration
+
+Before starting a migration, each source VM must meet these requirements:
+
+| Requirement | Details |
+|---|---|
+| ⏻ **Powered off** | virt-v2v requires exclusive disk access — the VM **must** be shut down (not suspended) |
+| 📸 **No snapshots** | Delete all snapshots and consolidate disks before migration |
+| 💽 **VMDK disks only** | RDM (Raw Device Mapping) and physical passthrough devices cannot be migrated |
+| 🔌 **No CD/ISO mounted** | Unmount any CD/DVD images to avoid conversion warnings |
+| 🪟 **Note VMware Tools** | VMware Tools will be replaced by VirtIO drivers during conversion (Windows VMs) |
+
+**To power off and remove snapshots:**
+
+```
+# Via govc CLI (optional)
+govc vm.power -off "MyVM"
+govc snapshot.remove -vm "MyVM" "*"
+
+# Or via vSphere Client:
+# Right-click VM → Power → Shut Down Guest OS
+# Right-click VM → Snapshots → Manage Snapshots → Delete All
+```
+
+### 4. Firewall & Network Checklist
+
+Ensure the following network paths are open **from the migration container to your VMware infrastructure**:
+
+```
+┌──────────────────────┐         ┌──────────────────────┐
+│  Migration Container │         │   VMware Environment │
+│  (Ubuntu 24 Docker)  │         │                      │
+│                      │  443/tcp│  ┌────────────────┐  │
+│                      ├────────►│  │  vCenter Server │  │
+│                      │         │  └────────────────┘  │
+│                      │  443/tcp│  ┌────────────────┐  │
+│                      ├────────►│  │  ESXi Host(s)  │  │
+│                      │   22/tcp│  │                │  │
+│                      ├────────►│  │  (SSH + HTTPS) │  │
+│                      │         │  └────────────────┘  │
+└──────────────────────┘         └──────────────────────┘
+```
+
+| Port | Protocol | Target | Required? | Purpose |
+|------|----------|--------|-----------|---------|
+| **443** | HTTPS | vCenter Server | If using vCenter | VM inventory, API queries |
+| **443** | HTTPS | ESXi Host(s) | **Yes** | vSphere API + VDDK disk access |
+| **22** | SSH | ESXi Host(s) | Recommended | VM moref retrieval for VDDK |
+| **902** | TCP | ESXi Host(s) | Optional | Legacy VMware data transport (rarely needed) |
+
+> [!IMPORTANT]
+> Even when connecting via vCenter, the migration container talks **directly to the ESXi host** for disk data transfer (VDDK). Make sure port 443 is open to **each ESXi host**, not just vCenter.
+
+#### Quick Network Test
+
+Run these from the migration host to verify connectivity:
+
+```bash
+# Test HTTPS to ESXi
+curl -sk https://your-esxi-host/ | head -5
+
+# Test HTTPS to vCenter (if applicable)
+curl -sk https://your-vcenter/ | head -5
+
+# Test SSH to ESXi
+ssh -o ConnectTimeout=5 root@your-esxi-host echo "SSH OK"
+
+# Retrieve ESXi SSL thumbprint (used by VDDK internally)
+openssl s_client -connect your-esxi-host:443 < /dev/null 2>/dev/null | \
+  openssl x509 -fingerprint -sha1 -noout
+```
+
+### 5. ESXi Firewall Rules (if modified from defaults)
+
+ESXi's built-in firewall allows inbound SSH and HTTPS by default. If your ESXi firewall has been locked down:
+
+```bash
+# On the ESXi host (via SSH or console)
+esxcli network firewall ruleset set --ruleset-id=sshServer --enabled=true
+esxcli network firewall ruleset set --ruleset-id=httpClient --enabled=true
+esxcli network firewall refresh
+```
+
+### 6. Connection Modes
+
+The migration tool supports two connection modes. Choose based on your environment:
+
+| Mode | Best For | How It Connects |
+|---|---|---|
+| **ESXi Direct** | Standalone ESXi hosts, small environments | Connects directly to the ESXi host via `esx://user@esxi-host` |
+| **vCenter** | Managed environments, multiple hosts | Connects via vCenter, discovers ESXi hosts automatically via `esx://user@vcenter` |
+
+> [!TIP]
+> **ESXi Direct** is simpler and has fewer permission requirements — use it when you can reach the ESXi host directly. Use **vCenter** mode when VMs span multiple hosts or when you only have vCenter credentials.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Install Docker
