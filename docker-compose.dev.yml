@@ -1,0 +1,37 @@
+services:
+  esx2scale:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: esx2scale-dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - esx2scale-data:/data
+      - ./backend:/app/backend
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - SYS_ADMIN
+      - NET_ADMIN
+    security_opt:
+      - apparmor:unconfined
+    # Fallback: uncomment below and remove devices/cap_add/security_opt
+    # privileged: true
+    environment:
+      - ESX2SCALE_DEV_MODE=true
+      - ESX2SCALE_DB_PATH=/data/db/esx2scale.db
+      - ESX2SCALE_MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-2}
+      - TZ=${TZ:-America/New_York}
+    command: >
+      bash -c "
+        mkdir -p /var/run/libvirt /var/lib/libvirt /var/log/libvirt;
+        libvirtd -d 2>/dev/null || true;
+        mkdir -p /data/db /data/conversions /data/vddk /data/uploads /data/logs /data/mounts;
+        export LIBGUESTFS_BACKEND=direct;
+        cd /app && uvicorn backend.main:app --host 0.0.0.0 --port 8080 --reload
+      "
+
+volumes:
+  esx2scale-data:

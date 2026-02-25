@@ -1,0 +1,54 @@
+services:
+  esx2scale:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: esx2scale:latest
+    container_name: esx2scale
+    restart: unless-stopped
+    ports:
+      - "${ESX2SCALE_PORT:-8080}:8080"
+    volumes:
+      - esx2scale-data:/data
+      # Optional: bind mount fast local storage for conversions
+      # - /opt/esx2scale/conversions:/data/conversions
+    devices:
+      - /dev/kvm:/dev/kvm
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - SYS_ADMIN      # Required for NFS/SMB mount operations
+      - NET_ADMIN       # Required for libvirt networking
+    security_opt:
+      - apparmor:unconfined
+    # Fallback: uncomment the line below and remove devices/cap_add/security_opt
+    # if you encounter permission issues with KVM or libvirt
+    # privileged: true
+    environment:
+      - ESX2SCALE_DB_PATH=/data/db/esx2scale.db
+      - ESX2SCALE_CONVERSION_DIR=/data/conversions
+      - ESX2SCALE_VDDK_DIR=/data/vddk
+      - ESX2SCALE_LOG_DIR=/data/logs
+      - ESX2SCALE_MAX_CONCURRENT_JOBS=${MAX_CONCURRENT_JOBS:-2}
+      - ESX2SCALE_VIRTIO_ISO=/usr/share/virtio-win/virtio-win.iso
+      - TZ=${TZ:-America/New_York}
+    deploy:
+      resources:
+        limits:
+          memory: ${MEMORY_LIMIT:-8g}
+        reservations:
+          memory: 2g
+    healthcheck:
+      test: ["CMD", "/healthcheck.sh"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+volumes:
+  esx2scale-data:
+    driver: local
